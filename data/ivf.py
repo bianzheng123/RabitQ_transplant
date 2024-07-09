@@ -4,6 +4,7 @@ import struct
 import os
 from utils.io import *
 
+np.random.seed(0)
 
 def delete_file_if_exist(dire):
     if os.path.exists(dire):

@@ -5,6 +5,7 @@ import os
 from utils.io import *
 from tqdm import tqdm
 
+np.random.seed(0)
 
 def Orthogonal(D):
     G = np.random.randn(D, D).astype('float32')

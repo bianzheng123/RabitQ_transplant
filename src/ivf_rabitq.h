@@ -336,8 +336,9 @@ void IVFRN::load(char *filename) {
 
     u = new float[vec_dim_pad_];
 #if defined(RANDOM_QUERY_QUANTIZATION)
-    std::random_device rd;
-    std::mt19937 gen(rd());
+//    std::random_device rd;
+//    std::mt19937 gen(rd());
+    std::mt19937 gen(0);
     std::uniform_real_distribution<> uniform(0.0, 1.0);
     for (int i = 0; i < vec_dim_pad_; i++)u[i] = uniform(gen);
 #else
