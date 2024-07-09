@@ -24,11 +24,11 @@ public:
     // ********************
     inline uint32_t popcount(u_int64_t *d);
 
-    inline uint32_t ip_bin_bin(uint64_t *q, uint64_t *d);
+    inline uint32_t ip_bin_bin(uint64_t *q, uint64_t *d) const;
 
-    inline uint32_t ip_byte_bin(uint64_t *q, uint64_t *d);
+    inline uint32_t ip_byte_bin(uint64_t *q, uint64_t *d) const;
 
-    inline void transpose_bin(uint8_t *q, uint64_t *tq);
+    inline void transpose_bin(uint8_t *q, uint64_t *tq) const;
 
     // ================================================================================================
     inline void range(float *q, float *c, float &vl, float &vr) const;
@@ -54,7 +54,7 @@ public:
 // ==============================================================
 // inner product between binary strings
 // ==============================================================
-inline uint32_t Space::ip_bin_bin(uint64_t *q, uint64_t *d) {
+inline uint32_t Space::ip_bin_bin(uint64_t *q, uint64_t *d) const {
     uint64_t ret = 0;
     for (int i = 0; i < vec_dim_pad_ / 64; i++) {
         ret += __builtin_popcountll((*d) & (*q));
@@ -80,7 +80,7 @@ inline uint32_t Space::popcount(u_int64_t *d) {
 // inner product between a decomposed byte string q 
 // and a binary string d
 // ==============================================================
-uint32_t Space::ip_byte_bin(uint64_t *q, uint64_t *d) {
+uint32_t Space::ip_byte_bin(uint64_t *q, uint64_t *d) const {
     uint64_t ret = 0;
     for (int i = 0; i < B_QUERY; i++) {
         ret += (ip_bin_bin(q, d) << i);
@@ -92,7 +92,7 @@ uint32_t Space::ip_byte_bin(uint64_t *q, uint64_t *d) {
 // ==============================================================
 // decompose the quantized query vector into B_q binary vector
 // ==============================================================
-void Space::transpose_bin(uint8_t *q, uint64_t *tq) {
+void Space::transpose_bin(uint8_t *q, uint64_t *tq) const {
     for (int i = 0; i < vec_dim_pad_; i += 32) {
         __m256i v = _mm256_load_si256(reinterpret_cast<__m256i *>(q));
         v = _mm256_slli_epi32(v, (8 - B_QUERY));

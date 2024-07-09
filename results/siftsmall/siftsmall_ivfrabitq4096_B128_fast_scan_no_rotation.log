@@ -198,3 +198,15 @@ Time = 877.58 us 	 QPS = 1139.5 query/s
 nprobe = 200 k = 100
 Recall = 98.84%	Ratio = 1.0002
 Time = 880.81 us 	 QPS = 1135.32 query/s
+------------------------------------------------
+nprobe = 200 k = 100
+Recall = 98.84%	Ratio = 1.0002
+Time = 890.98 us 	 QPS = 1122.36 query/s
+------------------------------------------------
+nprobe = 200 k = 100
+Recall = 98.84%	Ratio = 1.0002
+Time = 888.37 us 	 QPS = 1125.66 query/s
+------------------------------------------------
+nprobe = 200 k = 100
+Recall = 98.84%	Ratio = 1.0002
+Time = 919.09 us 	 QPS = 1088.03 query/s

@@ -68,7 +68,7 @@ public:
     void scan(ResultHeap &KNNs, float &distK, uint32_t k, \
                         uint64_t *quant_query, uint64_t *ptr_binary_code, uint32_t len, Factor *ptr_fac, \
                         const float sqr_y, const float vl, const float width, const float sumq, \
-                        float *query, float *data, uint32_t *id);
+                        float *query, float *data, uint32_t *id) const;
 
     void fast_scan(ResultHeap &KNNs, float &distK, uint32_t k, \
                         uint8_t *LUT, uint8_t *packed_code, uint32_t len, Factor *ptr_fac, \
@@ -82,9 +82,9 @@ public:
 
 // scan impl
 void IVFRN::scan(ResultHeap &KNNs, float &distK, uint32_t k, \
-                        uint64_t *quant_query, uint64_t *ptr_binary_code, uint32_t len, Factor *ptr_fac, \
-                        const float sqr_y, const float vl, const float width, const float sumq, \
-                        float *query, float *data, uint32_t *id) {
+                    uint64_t *quant_query, uint64_t *ptr_binary_code, uint32_t len, Factor *ptr_fac, \
+                    const float sqr_y, const float vl, const float width, const float sumq, \
+                    float *query, float *data, uint32_t *id) const {
 
     constexpr int SIZE = 32;
     float y = std::sqrt(sqr_y);
@@ -274,9 +274,9 @@ ResultHeap IVFRN::search(float *query, float *rd_query, uint32_t k, uint32_t npr
 #endif
 
 #if defined(SCAN)
-        scan(KNNs, distK, k,\
+        scan(KNNs, distK, k, \
                 quant_query, binary_code + start[c] * (vec_dim_pad_ / 64), len[c], fac + start[c], \
-                sqr_y, vl, width, sum_q,\
+                sqr_y, vl, width, sum_q, \
                 query, data + start[c] * vec_dim_, id + start[c]);
 #elif defined(FAST_SCAN)
         fast_scan(KNNs, distK, k, \
@@ -382,7 +382,7 @@ void IVFRN::load(char *filename) {
     }
 #else
     packed_start = NULL;
-    packed_code  = NULL;
+    packed_code = NULL;
 #endif
     for (int i = 0; i < N; i++) {
         long double x_x0 = (long double) dist_to_c[i] / x0[i];
