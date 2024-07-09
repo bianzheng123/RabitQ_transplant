@@ -17,9 +17,8 @@ const int MAXK = 100;
 
 long double rotation_time = 0;
 
-template<uint32_t D, uint32_t B>
 void test(const Matrix<float> &Q, const Matrix<float> &RandQ, const Matrix<float> &X, const Matrix<unsigned> &G,
-          const IVFRN<D, B> &ivf, int k) {
+          const IVFRN &ivf, int k) {
     float sys_t, usr_t, usr_t_sum = 0, total_time = 0, search_time = 0;
     struct rusage run_start, run_end;
 
@@ -91,6 +90,9 @@ int main(int argc, char *argv[]) {
     int iarg = 0;
     opterr = 1;    //getopt error message (off: 0)
 
+    const int vec_dim = 128;
+    const int vec_dim_pad = 128;
+
     char dataset[256] = "";
     char username[256] = "";
     char result_path[256] = "";
@@ -147,44 +149,44 @@ int main(int argc, char *argv[]) {
 
     char transformation_path[256] = "";
     if (rotation) {
-        sprintf(transformation_path, "%s/P_C%d_B%d.fvecs", index_path, numC, BB);
+        sprintf(transformation_path, "%s/P_C%d_B%d.fvecs", index_path, numC, vec_dim_pad);
     } else {
-        sprintf(transformation_path, "%s/no_rotation/P_C%d_B%d.fvecs", index_path, numC, BB);
+        sprintf(transformation_path, "%s/no_rotation/P_C%d_B%d.fvecs", index_path, numC, vec_dim_pad);
     }
     Matrix<float> P(transformation_path);
 
     char index_filename[256] = "";
     if (rotation) {
-        sprintf(index_filename, "%s/ivfrabitq%d_B%d.index", index_path, numC, BB);
+        sprintf(index_filename, "%s/ivfrabitq%d_B%d.index", index_path, numC, vec_dim_pad);
     } else {
-        sprintf(index_filename, "%s/no_rotation/ivfrabitq%d_B%d.index", index_path, numC, BB);
+        sprintf(index_filename, "%s/no_rotation/ivfrabitq%d_B%d.index", index_path, numC, vec_dim_pad);
     }
     std::cerr << index_filename << std::endl;
 
 #if defined(FAST_SCAN)
     char result_file_view[256] = "";
     if (rotation) {
-        sprintf(result_file_view, "%s/%s_ivfrabitq%d_B%d_fast_scan_rotation.log", result_path, dataset, numC, BB);
+        sprintf(result_file_view, "%s/%s_ivfrabitq%d_B%d_fast_scan_rotation.log", result_path, dataset, numC, vec_dim_pad);
     } else {
-        sprintf(result_file_view, "%s/%s_ivfrabitq%d_B%d_fast_scan_no_rotation.log", result_path, dataset, numC, BB);
+        sprintf(result_file_view, "%s/%s_ivfrabitq%d_B%d_fast_scan_no_rotation.log", result_path, dataset, numC, vec_dim_pad);
     }
 #elif defined(SCAN)
     char result_file_view[256] = "";
-    sprintf(result_file_view, "%s/%s_ivfrabitq%d_B%d_scan.log", result_path, dataset, numC, BB);
+    sprintf(result_file_view, "%s/%s_ivfrabitq%d_B%d_scan.log", result_path, dataset, numC, vec_dim_pad);
 #endif
     std::cerr << "Loading Succeed!" << std::endl;
     // ================================================================================================================================
 
     freopen(result_file_view, "a", stdout);
 
-    IVFRN<DIM, BB> ivf;
+    IVFRN ivf(vec_dim, vec_dim_pad);
     ivf.load(index_filename);
 
     float sys_t, usr_t, usr_t_sum = 0, total_time = 0, search_time = 0;
     struct rusage run_start, run_end;
     GetCurTime(&run_start);
 
-    Matrix<float> RandQ(Q.n, BB, Q);
+    Matrix<float> RandQ(Q.n, vec_dim_pad, Q);
     RandQ = mul(RandQ, P);
 
     GetCurTime(&run_end);

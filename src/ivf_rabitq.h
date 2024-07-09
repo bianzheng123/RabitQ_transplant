@@ -16,7 +16,6 @@
 #include "space.h"
 #include "fast_scan.h"
 
-template<uint32_t D, uint32_t B>
 class IVFRN {
 private:
 public:
@@ -28,10 +27,12 @@ public:
     };
 
     Factor *fac;
-    static constexpr float fac_norm = const_sqrt(1.0 * B);
-    static constexpr float max_x1 = 1.9 / const_sqrt(1.0 * B - 1.0);
+    float fac_norm;
+    float max_x1;
 
-    static Space<D, B> space;
+    Space space;
+
+    int vec_dim_, vec_dim_pad_;
 
     uint32_t N;                       // the number of data vectors 
     uint32_t C;                       // the number of clusters
@@ -53,23 +54,26 @@ public:
 
     IVFRN();
 
+    IVFRN(const int vec_dim, const int vec_dim_pad);
+
     IVFRN(const Matrix<float> &X, const Matrix<float> &_centroids, const Matrix<float> &dist_to_centroid,
-          const Matrix<float> &_x0, const Matrix<uint32_t> &cluster_id, const Matrix<uint64_t> &binary);
+          const Matrix<float> &_x0, const Matrix<uint32_t> &cluster_id, const Matrix<uint64_t> &binary,
+          const int vec_dim, const int vec_dim_pad);
 
     ~IVFRN();
 
     ResultHeap search(float *query, float *rd_query, uint32_t k, uint32_t nprobe,
                       float distK = std::numeric_limits<float>::max()) const;
 
-    static void scan(ResultHeap &KNNs, float &distK, uint32_t k, \
+    void scan(ResultHeap &KNNs, float &distK, uint32_t k, \
                         uint64_t *quant_query, uint64_t *ptr_binary_code, uint32_t len, Factor *ptr_fac, \
                         const float sqr_y, const float vl, const float width, const float sumq, \
                         float *query, float *data, uint32_t *id);
 
-    static void fast_scan(ResultHeap &KNNs, float &distK, uint32_t k, \
+    void fast_scan(ResultHeap &KNNs, float &distK, uint32_t k, \
                         uint8_t *LUT, uint8_t *packed_code, uint32_t len, Factor *ptr_fac, \
                         const float sqr_y, const float vl, const float width, const float sumq, \
-                        float *query, float *data, uint32_t *id);
+                        float *query, float *data, uint32_t *id) const;
 
     void save(char *filename);
 
@@ -77,8 +81,7 @@ public:
 };
 
 // scan impl
-template<uint32_t D, uint32_t B>
-void IVFRN<D, B>::scan(ResultHeap &KNNs, float &distK, uint32_t k, \
+void IVFRN::scan(ResultHeap &KNNs, float &distK, uint32_t k, \
                         uint64_t *quant_query, uint64_t *ptr_binary_code, uint32_t len, Factor *ptr_fac, \
                         const float sqr_y, const float vl, const float width, const float sumq, \
                         float *query, float *data, uint32_t *id) {
@@ -97,7 +100,7 @@ void IVFRN<D, B>::scan(ResultHeap &KNNs, float &distK, uint32_t k, \
                              width;
             float error_bound = y * (ptr_fac->error);
             *ptr_res = tmp_dist - error_bound;
-            ptr_binary_code += B / 64;
+            ptr_binary_code += vec_dim_pad_ / 64;
             ptr_fac++;
             ptr_res++;
         }
@@ -106,14 +109,14 @@ void IVFRN<D, B>::scan(ResultHeap &KNNs, float &distK, uint32_t k, \
         for (int j = 0; j < SIZE; j++) {
             if (*ptr_res < distK) {
 
-                float gt_dist = sqr_dist<D>(query, data);
+                float gt_dist = sqr_dist(query, data, vec_dim_);
                 if (gt_dist < distK) {
                     KNNs.emplace(gt_dist, *id);
                     if (KNNs.size() > k) KNNs.pop();
                     if (KNNs.size() == k)distK = KNNs.top().first;
                 }
             }
-            data += D;
+            data += vec_dim_;
             ptr_res++;
             id++;
         }
@@ -125,7 +128,7 @@ void IVFRN<D, B>::scan(ResultHeap &KNNs, float &distK, uint32_t k, \
                          (space.ip_byte_bin(quant_query, ptr_binary_code) * 2 - sumq) * (ptr_fac->factor_ip) * width;
         float error_bound = y * (ptr_fac->error);
         *ptr_res = tmp_dist - error_bound;
-        ptr_binary_code += B / 64;
+        ptr_binary_code += vec_dim_pad_ / 64;
         ptr_fac++;
         ptr_res++;
     }
@@ -133,26 +136,25 @@ void IVFRN<D, B>::scan(ResultHeap &KNNs, float &distK, uint32_t k, \
     ptr_res = &res[0];
     for (int i = it * SIZE; i < len; i++) {
         if (*ptr_res < distK) {
-            float gt_dist = sqr_dist<D>(query, data);
+            float gt_dist = sqr_dist(query, data, vec_dim_);
             if (gt_dist < distK) {
                 KNNs.emplace(gt_dist, *id);
                 if (KNNs.size() > k) KNNs.pop();
                 if (KNNs.size() == k)distK = KNNs.top().first;
             }
         }
-        data += D;
+        data += vec_dim_;
         ptr_res++;
         id++;
     }
 }
 
-template<uint32_t D, uint32_t B>
-void IVFRN<D, B>::fast_scan(ResultHeap &KNNs, float &distK, uint32_t k, \
+void IVFRN::fast_scan(ResultHeap &KNNs, float &distK, uint32_t k, \
                         uint8_t *LUT, uint8_t *packed_code, uint32_t len, Factor *ptr_fac, \
                         const float sqr_y, const float vl, const float width, const float sumq, \
-                        float *query, float *data, uint32_t *id) {
+                        float *query, float *data, uint32_t *id) const {
 
-    for (int i = 0; i < B / 4 * 16; i++)LUT[i] *= 2;
+    for (int i = 0; i < vec_dim_pad_ / 4 * 16; i++)LUT[i] *= 2;
 
     float y = std::sqrt(sqr_y);
 
@@ -165,8 +167,8 @@ void IVFRN<D, B>::fast_scan(ResultHeap &KNNs, float &distK, uint32_t k, \
         float low_dist[SIZE];
         float *ptr_low_dist = &low_dist[0];
         uint16_t PORTABLE_ALIGN32 result[SIZE];
-        accumulate<B>((SIZE / 32), packed_code, LUT, result);
-        packed_code += SIZE * B / 8;
+        accumulate((SIZE / 32), packed_code, LUT, result, vec_dim_pad_);
+        packed_code += SIZE * vec_dim_pad_ / 8;
 
         for (int i = 0; i < SIZE; i++) {
             float tmp_dist = (ptr_fac->sqr_x) + sqr_y + ptr_fac->factor_ppc * vl +
@@ -180,7 +182,7 @@ void IVFRN<D, B>::fast_scan(ResultHeap &KNNs, float &distK, uint32_t k, \
         for (int j = 0; j < SIZE; j++) {
             if (*ptr_low_dist < distK) {
 
-                float gt_dist = sqr_dist<D>(query, data);
+                float gt_dist = sqr_dist(query, data, vec_dim_);
                 // cerr << *ptr_low_dist << " " << gt_dist << endl;
                 if (gt_dist < distK) {
                     KNNs.emplace(gt_dist, *id);
@@ -188,7 +190,7 @@ void IVFRN<D, B>::fast_scan(ResultHeap &KNNs, float &distK, uint32_t k, \
                     if (KNNs.size() == k)distK = KNNs.top().first;
                 }
             }
-            data += D;
+            data += vec_dim_;
             ptr_low_dist++;
             id++;
         }
@@ -198,7 +200,7 @@ void IVFRN<D, B>::fast_scan(ResultHeap &KNNs, float &distK, uint32_t k, \
         float low_dist[SIZE];
         float *ptr_low_dist = &low_dist[0];
         uint16_t PORTABLE_ALIGN32 result[SIZE];
-        accumulate<B>(nblk_remain, packed_code, LUT, result);
+        accumulate(nblk_remain, packed_code, LUT, result, vec_dim_pad_);
 
         for (int i = 0; i < remain; i++) {
             float tmp_dist = (ptr_fac->sqr_x) + sqr_y + ptr_fac->factor_ppc * vl +
@@ -214,14 +216,14 @@ void IVFRN<D, B>::fast_scan(ResultHeap &KNNs, float &distK, uint32_t k, \
         for (int i = 0; i < remain; i++) {
             if (*ptr_low_dist < distK) {
 
-                float gt_dist = sqr_dist<D>(query, data);
+                float gt_dist = sqr_dist(query, data, vec_dim_);
                 if (gt_dist < distK) {
                     KNNs.emplace(gt_dist, *id);
                     if (KNNs.size() > k) KNNs.pop();
                     if (KNNs.size() == k)distK = KNNs.top().first;
                 }
             }
-            data += D;
+            data += vec_dim_;
             ptr_low_dist++;
             id++;
         }
@@ -229,8 +231,7 @@ void IVFRN<D, B>::fast_scan(ResultHeap &KNNs, float &distK, uint32_t k, \
 }
 
 // search impl
-template<uint32_t D, uint32_t B>
-ResultHeap IVFRN<D, B>::search(float *query, float *rd_query, uint32_t k, uint32_t nprobe, float distK) const {
+ResultHeap IVFRN::search(float *query, float *rd_query, uint32_t k, uint32_t nprobe, float distK) const {
     // The default value of distK is +inf 
     ResultHeap KNNs;
     // ===========================================================================================================
@@ -238,16 +239,16 @@ ResultHeap IVFRN<D, B>::search(float *query, float *rd_query, uint32_t k, uint32
     Result centroid_dist[numC];
     float *ptr_c = centroid;
     for (int i = 0; i < C; i++) {
-        centroid_dist[i].first = sqr_dist<B>(rd_query, ptr_c);
+        centroid_dist[i].first = sqr_dist(rd_query, ptr_c, vec_dim_pad_);
         centroid_dist[i].second = i;
-        ptr_c += B;
+        ptr_c += vec_dim_pad_;
     }
     std::partial_sort(centroid_dist, centroid_dist + nprobe, centroid_dist + numC);
 
     // ===========================================================================================================
     // Scan the first nprobe clusters.
     Result *ptr_centroid_dist = (&centroid_dist[0]);
-    uint8_t  PORTABLE_ALIGN64 byte_query[B];
+    uint8_t  PORTABLE_ALIGN64 byte_query[vec_dim_pad_];
 
     for (int pb = 0; pb < nprobe; pb++) {
         uint32_t c = ptr_centroid_dist->second;
@@ -257,30 +258,31 @@ ResultHeap IVFRN<D, B>::search(float *query, float *rd_query, uint32_t k, uint32
         // =======================================================================================================
         // Preprocess the residual query and the quantized query
         float vl, vr;
-        space.range(rd_query, centroid + c * B, vl, vr);
+        space.range(rd_query, centroid + c * vec_dim_pad_, vl, vr);
         float width = (vr - vl) / ((1 << B_QUERY) - 1);
         uint32_t sum_q = 0;
-        space.quantize(byte_query, rd_query, centroid + c * B, u, vl, width, sum_q);
+        space.quantize(byte_query, rd_query, centroid + c * vec_dim_pad_, u, vl, width, sum_q);
 
 #if defined(SCAN)               // Binary String Representation 
-        uint64_t PORTABLE_ALIGN32 quant_query[B_QUERY * B / 64];
+        uint64_t PORTABLE_ALIGN32 quant_query[B_QUERY * vec_dim_pad_ / 64];
         memset(quant_query, 0, sizeof(quant_query));
         space.transpose_bin(byte_query, quant_query);
 #elif defined(FAST_SCAN)        // Look-Up-Table Representation 
-        uint8_t PORTABLE_ALIGN32 LUT[B / 4 * 16];
-        pack_LUT<B>(byte_query, LUT);
+        uint8_t PORTABLE_ALIGN32 LUT[vec_dim_pad_ / 4 * 16];
+        pack_LUT(byte_query, LUT,
+                 vec_dim_pad_);
 #endif
 
 #if defined(SCAN)
         scan(KNNs, distK, k,\
-                quant_query, binary_code + start[c] * (B / 64), len[c], fac + start[c], \
+                quant_query, binary_code + start[c] * (vec_dim_pad_ / 64), len[c], fac + start[c], \
                 sqr_y, vl, width, sum_q,\
-                query, data + start[c] * D, id + start[c]);
+                query, data + start[c] * vec_dim_, id + start[c]);
 #elif defined(FAST_SCAN)
         fast_scan(KNNs, distK, k, \
                 LUT, packed_code + packed_start[c], len[c], fac + start[c], \
                 sqr_y, vl, width, sum_q, \
-                query, data + start[c] * D, id + start[c]);
+                query, data + start[c] * vec_dim_, id + start[c]);
 #endif
     }
     return KNNs;
@@ -289,12 +291,11 @@ ResultHeap IVFRN<D, B>::search(float *query, float *rd_query, uint32_t k, uint32
 
 // ==============================================================================================================================
 // Save and Load Functions
-template<uint32_t D, uint32_t B>
-void IVFRN<D, B>::save(char *filename) {
+void IVFRN::save(char *filename) {
     std::ofstream output(filename, std::ios::binary);
 
-    uint32_t d = D;
-    uint32_t b = B;
+    uint32_t d = vec_dim_;
+    uint32_t b = vec_dim_pad_;
     output.write((char *) &N, sizeof(uint32_t));
     output.write((char *) &d, sizeof(uint32_t));
     output.write((char *) &C, sizeof(uint32_t));
@@ -306,17 +307,16 @@ void IVFRN<D, B>::save(char *filename) {
     output.write((char *) dist_to_c, N * sizeof(float));
     output.write((char *) x0, N * sizeof(float));
 
-    output.write((char *) centroid, C * B * sizeof(float));
-    output.write((char *) data, N * D * sizeof(float));
-    output.write((char *) binary_code, N * B / 64 * sizeof(uint64_t));
+    output.write((char *) centroid, C * vec_dim_pad_ * sizeof(float));
+    output.write((char *) data, N * vec_dim_ * sizeof(float));
+    output.write((char *) binary_code, N * vec_dim_pad_ / 64 * sizeof(uint64_t));
 
     output.close();
     std::cerr << "Saved!" << std::endl;
 }
 
 // load impl
-template<uint32_t D, uint32_t B>
-void IVFRN<D, B>::load(char *filename) {
+void IVFRN::load(char *filename) {
     std::ifstream input(filename, std::ios::binary);
     //std::cerr << filename << std::endl;
 
@@ -331,23 +331,23 @@ void IVFRN<D, B>::load(char *filename) {
     input.read((char *) &b, sizeof(uint32_t));
 
     std::cerr << d << std::endl;
-    assert(d == D);
-    assert(b == B);
+    assert(d == vec_dim_);
+    assert(b == vec_dim_pad_);
 
-    u = new float[B];
+    u = new float[vec_dim_pad_];
 #if defined(RANDOM_QUERY_QUANTIZATION)
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> uniform(0.0, 1.0);
-    for (int i = 0; i < B; i++)u[i] = uniform(gen);
+    for (int i = 0; i < vec_dim_pad_; i++)u[i] = uniform(gen);
 #else
-    for(int i=0;i<B;i++)u[i] = 0.5;
+    for(int i=0;i<vec_dim_pad_;i++)u[i] = 0.5;
 #endif
 
-    centroid = new float[C * B];
-    data = new float[N * D];
+    centroid = new float[C * vec_dim_pad_];
+    data = new float[N * vec_dim_];
 
-    binary_code = static_cast<uint64_t *>(aligned_alloc(256, N * B / 64 * sizeof(uint64_t)));
+    binary_code = static_cast<uint64_t *>(aligned_alloc(256, N * vec_dim_pad_ / 64 * sizeof(uint64_t)));
 
     start = new uint32_t[C];
     len = new uint32_t[C];
@@ -363,20 +363,21 @@ void IVFRN<D, B>::load(char *filename) {
     input.read((char *) dist_to_c, N * sizeof(float));
     input.read((char *) x0, N * sizeof(float));
 
-    input.read((char *) centroid, C * B * sizeof(float));
-    input.read((char *) data, N * D * sizeof(float));
-    input.read((char *) binary_code, N * B / 64 * sizeof(uint64_t));
+    input.read((char *) centroid, C * vec_dim_pad_ * sizeof(float));
+    input.read((char *) data, N * vec_dim_ * sizeof(float));
+    input.read((char *) binary_code, N * vec_dim_pad_ / 64 * sizeof(uint64_t));
 
 #if defined(FAST_SCAN)
     packed_start = new uint32_t[C];
     int cur = 0;
     for (int i = 0; i < C; i++) {
         packed_start[i] = cur;
-        cur += (len[i] + 31) / 32 * 32 * B / 8;
+        cur += (len[i] + 31) / 32 * 32 * vec_dim_pad_ / 8;
     }
     packed_code = static_cast<uint8_t *>(aligned_alloc(32, cur * sizeof(uint8_t)));
     for (int i = 0; i < C; i++) {
-        pack_codes<B>(binary_code + start[i] * (B / 64), len[i], packed_code + packed_start[i]);
+        pack_codes(binary_code + start[i] * (vec_dim_pad_ / 64), len[i], packed_code + packed_start[i],
+                   vec_dim_pad_);
     }
 #else
     packed_start = NULL;
@@ -386,7 +387,8 @@ void IVFRN<D, B>::load(char *filename) {
         long double x_x0 = (long double) dist_to_c[i] / x0[i];
         fac[i].sqr_x = dist_to_c[i] * dist_to_c[i];
         fac[i].error = 2 * max_x1 * std::sqrt(x_x0 * x_x0 - dist_to_c[i] * dist_to_c[i]);
-        fac[i].factor_ppc = -2 / fac_norm * x_x0 * ((float) space.popcount(binary_code + i * B / 64) * 2 - B);
+        fac[i].factor_ppc =
+                -2 / fac_norm * x_x0 * ((float) space.popcount(binary_code + i * vec_dim_pad_ / 64) * 2 - vec_dim_pad_);
         fac[i].factor_ip = -2 / fac_norm * x_x0;
     }
     input.close();
@@ -395,8 +397,15 @@ void IVFRN<D, B>::load(char *filename) {
 
 // ==============================================================================================================================
 // Construction and Deconstruction Functions
-template<uint32_t D, uint32_t B>
-IVFRN<D, B>::IVFRN() {
+IVFRN::IVFRN() {
+
+    IVFRN::vec_dim_ = 128;
+    IVFRN::vec_dim_pad_ = 128;
+    fac_norm = const_sqrt(1.0 * vec_dim_pad_);
+    max_x1 = 1.9 / const_sqrt(1.0 * vec_dim_pad_ - 1.0);
+
+    space = Space(vec_dim_, vec_dim_pad_);
+
     N = C = 0;
     start = len = id = NULL;
     x0 = dist_to_c = centroid = data = NULL;
@@ -405,9 +414,34 @@ IVFRN<D, B>::IVFRN() {
     u = NULL;
 }
 
-template<uint32_t D, uint32_t B>
-IVFRN<D, B>::IVFRN(const Matrix<float> &X, const Matrix<float> &_centroids, const Matrix<float> &dist_to_centroid,
-                   const Matrix<float> &_x0, const Matrix<uint32_t> &cluster_id, const Matrix<uint64_t> &binary) {
+IVFRN::IVFRN(const int vec_dim, const int vec_dim_pad) {
+
+    IVFRN::vec_dim_ = vec_dim;
+    IVFRN::vec_dim_pad_ = vec_dim_pad;
+    fac_norm = const_sqrt(1.0 * vec_dim_pad);
+    max_x1 = 1.9 / const_sqrt(1.0 * vec_dim_pad - 1.0);
+
+    space = Space(vec_dim, vec_dim_pad);
+
+    N = C = 0;
+    start = len = id = NULL;
+    x0 = dist_to_c = centroid = data = NULL;
+    binary_code = NULL;
+    fac = NULL;
+    u = NULL;
+}
+
+IVFRN::IVFRN(const Matrix<float> &X, const Matrix<float> &_centroids, const Matrix<float> &dist_to_centroid,
+             const Matrix<float> &_x0, const Matrix<uint32_t> &cluster_id, const Matrix<uint64_t> &binary,
+             const int vec_dim, const int vec_dim_pad) {
+
+    IVFRN::vec_dim_ = vec_dim;
+    IVFRN::vec_dim_pad_ = vec_dim_pad;
+    fac_norm = const_sqrt(1.0 * vec_dim_pad);
+    max_x1 = 1.9 / const_sqrt(1.0 * vec_dim_pad - 1.0);
+
+    space = Space(vec_dim, vec_dim_pad);
+
     fac = NULL;
     u = NULL;
 
@@ -415,8 +449,8 @@ IVFRN<D, B>::IVFRN(const Matrix<float> &X, const Matrix<float> &_centroids, cons
     C = _centroids.n;
 
     // check uint64_t
-    assert(B % 64 == 0);
-    assert(B >= D);
+    assert(vec_dim_pad_ % 64 == 0);
+    assert(vec_dim_pad_ >= vec_dim_);
 
     start = new uint32_t[C];
     len = new uint32_t[C];
@@ -441,25 +475,24 @@ IVFRN<D, B>::IVFRN(const Matrix<float> &X, const Matrix<float> &_centroids, cons
         start[i] -= len[i];
     }
 
-    centroid = new float[C * B];
-    data = new float[N * D];
-    binary_code = new uint64_t[N * B / 64];
+    centroid = new float[C * vec_dim_pad_];
+    data = new float[N * vec_dim_];
+    binary_code = new uint64_t[N * vec_dim_pad_ / 64];
 
-    std::memcpy(centroid, _centroids.data, C * B * sizeof(float));
+    std::memcpy(centroid, _centroids.data, C * vec_dim_pad_ * sizeof(float));
     float *data_ptr = data;
     uint64_t *binary_code_ptr = binary_code;
 
     for (int i = 0; i < N; i++) {
         int x = id[i];
-        std::memcpy(data_ptr, X.data + x * D, D * sizeof(float));
-        std::memcpy(binary_code_ptr, binary.data + x * (B / 64), (B / 64) * sizeof(uint64_t));
-        data_ptr += D;
-        binary_code_ptr += B / 64;
+        std::memcpy(data_ptr, X.data + x * vec_dim_, vec_dim_ * sizeof(float));
+        std::memcpy(binary_code_ptr, binary.data + x * (vec_dim_pad_ / 64), (vec_dim_pad_ / 64) * sizeof(uint64_t));
+        data_ptr += vec_dim_;
+        binary_code_ptr += vec_dim_pad_ / 64;
     }
 }
 
-template<uint32_t D, uint32_t B>
-IVFRN<D, B>::~IVFRN() {
+IVFRN::~IVFRN() {
     if (id != NULL) delete[] id;
     if (dist_to_c != NULL) delete[] dist_to_c;
     if (len != NULL) delete[] len;

@@ -29,6 +29,9 @@ int main(int argc, char *argv[]) {
     int iarg = 0;
     opterr = 1;    //getopt error message (off: 0)
 
+    const int vec_dim = 128;
+    const int vec_dim_pad = 128;
+
     char dataset[256] = "";
     char username[256] = "";
 
@@ -67,10 +70,10 @@ int main(int argc, char *argv[]) {
     sprintf(base_data_filename, "%s/%s_base.fvecs", data_path, dataset);
     Matrix<float> X(base_data_filename);
 
-    sprintf(centroid_path, "%s/RandCentroid_C%d_B%d.fvecs", index_path, numC, BB);
+    sprintf(centroid_path, "%s/RandCentroid_C%d_B%d.fvecs", index_path, numC, vec_dim_pad);
     Matrix<float> C(centroid_path);
 
-    sprintf(x0_path, "%s/x0_C%d_B%d.fvecs", index_path, numC, BB);
+    sprintf(x0_path, "%s/x0_C%d_B%d.fvecs", index_path, numC, vec_dim_pad);
     Matrix<float> x0(x0_path);
 
     sprintf(dist_to_centroid_path, "%s/%s_dist_to_centroid_%d.fvecs", index_path, dataset, numC);
@@ -79,34 +82,36 @@ int main(int argc, char *argv[]) {
     sprintf(cluster_id_path, "%s/%s_cluster_id_%d.ivecs", index_path, dataset, numC);
     Matrix<uint32_t> cluster_id(cluster_id_path);
 
-    sprintf(binary_path, "%s/RandNet_C%d_B%d.Ivecs", index_path, numC, BB);
+    sprintf(binary_path, "%s/RandNet_C%d_B%d.Ivecs", index_path, numC, vec_dim_pad);
     Matrix<uint64_t> binary(binary_path);
 
-    sprintf(result_index_filename, "%s/ivfrabitq%d_B%d.index", index_path, numC, BB);
+    sprintf(result_index_filename, "%s/ivfrabitq%d_B%d.index", index_path, numC, vec_dim_pad);
     std::cerr << "Loading Succeed!" << std::endl << std::endl;
     // ==============================================================================================================
 
-    IVFRN<DIM, BB> ivf(X, C, dist_to_centroid, x0, cluster_id, binary);
+    IVFRN ivf(X, C, dist_to_centroid, x0, cluster_id, binary,
+              vec_dim, vec_dim_pad);
 
     ivf.save(result_index_filename);
 
     // ==============================================================================================================
     // No rotation
 
-    sprintf(centroid_path, "%s/no_rotation/RandCentroid_C%d_B%d.fvecs", index_path, numC, BB);
+    sprintf(centroid_path, "%s/no_rotation/RandCentroid_C%d_B%d.fvecs", index_path, numC, vec_dim_pad);
     Matrix<float> C_n(centroid_path);
 
-    sprintf(x0_path, "%s/no_rotation/x0_C%d_B%d.fvecs", index_path, numC, BB);
+    sprintf(x0_path, "%s/no_rotation/x0_C%d_B%d.fvecs", index_path, numC, vec_dim_pad);
     Matrix<float> x0_n(x0_path);
 
-    sprintf(binary_path, "%s/no_rotation/RandNet_C%d_B%d.Ivecs", index_path, numC, BB);
+    sprintf(binary_path, "%s/no_rotation/RandNet_C%d_B%d.Ivecs", index_path, numC, vec_dim_pad);
     Matrix<uint64_t> binary_n(binary_path);
 
-    sprintf(result_index_filename, "%s/no_rotation/ivfrabitq%d_B%d.index", index_path, numC, BB);
+    sprintf(result_index_filename, "%s/no_rotation/ivfrabitq%d_B%d.index", index_path, numC, vec_dim_pad);
     std::cerr << "Loading Succeed!" << std::endl << std::endl;
     // ==============================================================================================================
 
-    IVFRN<DIM, BB> ivf_no_rotation(X, C_n, dist_to_centroid, x0_n, cluster_id, binary_n);
+    IVFRN ivf_no_rotation(X, C_n, dist_to_centroid, x0_n, cluster_id, binary_n,
+                          vec_dim, vec_dim_pad);
 
     ivf_no_rotation.save(result_index_filename);
 

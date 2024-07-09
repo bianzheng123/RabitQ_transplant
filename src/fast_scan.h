@@ -19,15 +19,15 @@ using namespace std;
 // ==============================================================
 // look up the tables for a packed batch of 32 quantization codes
 // ==============================================================
-template<uint32_t B>
-inline void accumulate_one_block(uint8_t *codes, uint8_t *LUT, uint16_t *result) {
+inline void accumulate_one_block(uint8_t *codes, uint8_t *LUT, uint16_t *result,
+                                 const int vec_dim_pad_) {
     __m256i low_mask = _mm256_set1_epi8(0xf);
     __m256i accu[4];
     for (int i = 0; i < 4; i++) {
         accu[i] = _mm256_setzero_si256();
     }
 
-    constexpr uint32_t M = B / 4;
+    const uint32_t M = vec_dim_pad_ / 4;
 
     for (int m = 0; m < M; m += 2) {
         __m256i c = _mm256_load_si256((__m256i const *) codes);
@@ -63,11 +63,11 @@ inline void accumulate_one_block(uint8_t *codes, uint8_t *LUT, uint16_t *result)
 // ==============================================================
 // look up the tables for all the packed batches
 // ==============================================================
-template<uint32_t B>
-inline void accumulate(uint32_t nblk, uint8_t *codes, uint8_t *LUT, uint16_t *result) {
+inline void accumulate(uint32_t nblk, uint8_t *codes, uint8_t *LUT, uint16_t *result,
+                       const int vec_dim_pad_) {
     for (int i = 0; i < nblk; i++) {
-        accumulate_one_block<B>(codes, LUT, result);
-        codes += 32 * B / 8;
+        accumulate_one_block(codes, LUT, result, vec_dim_pad_);
+        codes += 32 * vec_dim_pad_ / 8;
         result += 32;
     }
 }
@@ -76,9 +76,8 @@ inline void accumulate(uint32_t nblk, uint8_t *codes, uint8_t *LUT, uint16_t *re
 // ==============================================================
 // prepare the look-up-table from the quantized query vector
 // ==============================================================
-template<uint32_t B>
-inline void pack_LUT(uint8_t *byte_query, uint8_t *LUT) {
-    constexpr uint32_t M = B / 4;
+inline void pack_LUT(uint8_t *byte_query, uint8_t *LUT, int vec_dim_pad_) {
+    const  uint32_t M = vec_dim_pad_ / 4;
     constexpr uint32_t pos[16] = {
             3 /*0000*/, 3/*0001*/, 2/*0010*/, 3/*0011*/,
             1 /*0100*/, 3/*0101*/, 2/*0110*/, 3/*0111*/,
@@ -111,11 +110,11 @@ inline void get_matrix_column(T *src, size_t m, size_t n, int64_t i, int64_t j, 
 // pack 32 quantization codes in a batch from the quantization 
 // codes represented by a sequence of uint8_t variables
 // ==============================================================
-template<uint32_t B>
-void pack_codes(const uint8_t *codes, uint32_t ncode, uint8_t *blocks) {
+void pack_codes(const uint8_t *codes, uint32_t ncode, uint8_t *blocks,
+                const int vec_dim_pad) {
 
     uint32_t ncode_pad = (ncode + 31) / 32 * 32;
-    constexpr uint32_t M = B / 4;
+    const uint32_t M = vec_dim_pad / 4;
     const uint8_t bbs = 32;
     memset(blocks, 0, ncode_pad * M / 2);
 
@@ -146,25 +145,27 @@ void pack_codes(const uint8_t *codes, uint32_t ncode, uint8_t *blocks) {
 // pack 32 quantization codes in a batch from the quantization 
 // codes represented by a sequence of uint64_t variables
 // ==============================================================
-template<uint32_t B>
-void pack_codes(const uint64_t *binary_code, uint32_t ncode, uint8_t *blocks) {
+void pack_codes(const uint64_t *binary_code, uint32_t ncode, uint8_t *blocks,
+                const int vec_dim_pad) {
     uint32_t ncode_pad = (ncode + 31) / 32 * 32;
     memset(blocks, 0, ncode_pad * sizeof(uint8_t));
 
-    uint8_t *binary_code_8bit = new uint8_t[ncode_pad * B / 8];
-    memcpy(binary_code_8bit, binary_code, ncode * B / 64 * sizeof(uint64_t));
+    uint8_t *binary_code_8bit = new uint8_t[ncode_pad * vec_dim_pad / 8];
+    memcpy(binary_code_8bit, binary_code, ncode * vec_dim_pad / 64 * sizeof(uint64_t));
 
     for (int i = 0; i < ncode; i++)
-        for (int j = 0; j < B / 64; j++)
+        for (int j = 0; j < vec_dim_pad / 64; j++)
             for (int k = 0; k < 4; k++)
-                swap(binary_code_8bit[i * B / 8 + 8 * j + k], binary_code_8bit[i * B / 8 + 8 * j + 8 - k - 1]);
+                swap(binary_code_8bit[i * vec_dim_pad / 8 + 8 * j + k],
+                     binary_code_8bit[i * vec_dim_pad / 8 + 8 * j + 8 - k - 1]);
 
-    for (int i = 0; i < ncode * B / 8; i++) {
+    for (int i = 0; i < ncode * vec_dim_pad / 8; i++) {
         uint8_t v = binary_code_8bit[i];
         uint8_t x = (v >> 4);
         uint8_t y = (v & 15);
         binary_code_8bit[i] = (y << 4 | x);
     }
-    pack_codes<B>(binary_code_8bit, ncode, blocks);
+    pack_codes(binary_code_8bit, ncode, blocks,
+               vec_dim_pad);
     delete[] binary_code_8bit;
 }
