@@ -2,3 +2,7 @@
 nprobe = 200 k = 100
 Recall = 99%	Ratio = 1.00016
 Time = 926.55 us 	 QPS = 1079.27 query/s
+------------------------------------------------
+nprobe = 200 k = 100
+Recall = 98.86%	Ratio = 1.00018
+Time = 888.63 us 	 QPS = 1125.33 query/s
