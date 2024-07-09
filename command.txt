@@ -1,0 +1,40 @@
+how to install:
+1. download the eigen library, use only the src file on /src/Eigen
+2. download sift and siftsmall dataset on data/
+3. run ivf.py, then you get:
+
+sift_centroid_4096.fvecs
+ - this means the centroids, 4096 means # centroids, shape (# centroid, vec_dim)
+sift_cluster_id_4096.ivecs
+ - this means the cluster ID that each item points to, shape (# item, 1)
+sift_dist_to_centroid_4096.fvecs
+ - this means the distance to the centroid of each item, shape (# item, 1)
+
+4. run rabitq.py, then you get:
+
+./sift/P_C4096_B128.fvecs
+ - the projection matrix, shape (vec_dim, vec_dim)
+./sift/RandCentroid_C4096_B128.fvecs
+ - centroids after rotation, shape (# centroid, vec_dim)
+./sift/x0_C4096_B128.fvecs
+ - estimated inner product between the item and the quantized item
+ - used for estimating the query score, shape (# centroid, 1)
+ - the vector are stored of residual
+./sift/RandNet_C4096_B128.Ivecs
+ - the code of each item in uint64_t, shape (# item, vec_dim / 64)
+ - the vector are stored with residual
+
+
+5. run script/index.sh, then you get:
+
+ivfrabitq4096_B128.index at data/sift/
+ - the index file, mainly pack the following index
+index_sift at bin/
+ - the compile file
+
+6. run script/search.sh, then you get:
+
+search_sift at bin/
+ - the compile file
+log result of sift at results/
+ - the search result
